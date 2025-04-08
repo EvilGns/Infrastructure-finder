@@ -1,102 +1,71 @@
 import requests
 import socket
 import sys
+import os
 
 def print_usage():
-    """
-    Prints the usage instructions for running the script.
-    """
-    print("Usage: python script.py <IP_API_KEY> <domain_or_file>")
-    print("Example 1: python script.py <YOUR_IP_API_KEY> example.com")
-    print("Example 2: python script.py <YOUR_IP_API_KEY> domains.txt")
-    print("Note: Replace <YOUR_IP_API_KEY> with your actual IpInfo API key.")
-    print("If you use a file (domains.txt), make sure it contains one domain name per line.")
-    print("To enter multiple domains, separate them with commas (e.g., domain1.com, domain2.com).")
+    print("Usage:")
+    print("  python ipinfo_lookup.py <IPINFO_API_KEY> <domains.txt>")
+    print("\nExample:")
+    print("  python ipinfo_lookup.py YOUR_API_KEY domains.txt")
+    print("\nNOTE:")
+    print("- To get a free API key, register at: https://ipinfo.io/signup")
     sys.exit(1)
 
-def get_ip_info(ip_api_key, ip_address):
-    """Get IP Info using IpInfo API"""
-    url = f"https://ipinfo.io/{ip_address}/json"
-    headers = {"Authorization": f"Bearer {ip_api_key}"}
+def read_domains(file_path):
+    if not os.path.isfile(file_path):
+        print(f"[!] File not found: {file_path}")
+        sys.exit(1)
+    with open(file_path, 'r') as f:
+        return [line.strip() for line in f if line.strip()]
+
+def resolve_domain(domain):
+    try:
+        ip = socket.gethostbyname(domain)
+        return ip
+    except socket.gaierror as e:
+        print(f"[!] Could not resolve {domain}: {e}")
+        return None
+
+def get_ip_info(api_key, ip):
+    url = f"https://ipinfo.io/{ip}/json"
+    headers = {"Authorization": f"Bearer {api_key}"}
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
-            print(f"Error: {response.status_code} - {response.text}")
-            return None
-    except requests.exceptions.RequestException as e:
-        print(f"Request Error: {e}")
-        return None
-
-def fetch_subdomains(domain_name):
-    """Fetch subdomains (Example function)"""
-    # Replace with actual subdomain fetching logic (e.g., from crt.sh, SecurityTrails, etc.)
-    return [f"www.{domain_name}", f"mail.{domain_name}", f"api.{domain_name}"]
-
-def process_domains(domain_names, ip_api_key):
-    """Process domains to fetch IP and location info"""
-    ip_addresses = []
-    combined = []
-    
-    for domain_name in domain_names:
-        print(f"Processing domain: {domain_name}")
-        subdomains = fetch_subdomains(domain_name)
-
-        # Resolving IP addresses of respective subdomains
-        for subdomain in subdomains:
-            print(subdomain)  # DEBUG
-            try:
-                ip_address = socket.gethostbyname(subdomain)
-                print(f"Resolved {subdomain} to {ip_address}")  # DEBUG
-                ip_addresses.append(ip_address)
-
-                # Get IP info from IpInfo API
-                ip_info = get_ip_info(ip_api_key, ip_address)
-                if ip_info:
-                    # Use .get() to safely access 'asn_name' and 'org' fields
-                    asn_name = ip_info.get('asn_name', 'N/A')  # Default to 'N/A' if not available
-                    org = ip_info.get('org', 'N/A')  # Default to 'N/A' if not available
-                    
-                    # Include 'org' as part of the output
-                    list_info = f"{subdomain} : {ip_address} | City: {ip_info.get('city', 'N/A')} | Region: {ip_info.get('region', 'N/A')} | Country: {ip_info.get('country', 'N/A')} | Location: {ip_info.get('loc', 'N/A')} | Hosting: {org} | ASN: {asn_name}"
-                    combined.append(list_info)
-            except socket.gaierror as error:
-                print(f"Error resolving {subdomain}: {error}")
-                
-    return combined
-
-def read_domains_from_file(file_path):
-    """Read domain names from a text file"""
-    with open(file_path, 'r') as file:
-        return [line.strip() for line in file.readlines()]
+            print(f"[!] IPInfo error for {ip}: {response.status_code}")
+            return {}
+    except requests.RequestException as e:
+        print(f"[!] Request failed for {ip}: {e}")
+        return {}
 
 def main():
-    # Check if proper arguments are passed
-    if len(sys.argv) < 3:
+    if len(sys.argv) != 3:
         print_usage()
 
-    ip_api_key = sys.argv[1]
-    input_source = sys.argv[2]
+    api_key = sys.argv[1]
+    domain_file = sys.argv[2]
+    domains = read_domains(domain_file)
 
-    if input_source.endswith(".txt"):
-        # If a file is provided, read the domains from the file
-        domain_names = read_domains_from_file(input_source)
-    else:
-        # If a single domain or multiple domains separated by commas are provided
-        domain_names = input_source.split(",")
+    print(f"\n[+] Processing {len(domains)} domain(s)...\n")
 
-    print(f"Processing the following domains: {domain_names}")
-    results = process_domains(domain_names, ip_api_key)
-
-    # Output the combined results, separated by "-----------"
-    if results:
-        print("\nInfrastructure Info:\n")
-        for result in results:
-            print(result)
-            print("-----------")  # Separate results by "-----------"
-    else:
-        print("No infrastructure information found.")
+    for domain in domains:
+        print(f"[Domain] {domain}")
+        ip = resolve_domain(domain)
+        if ip:
+            ip_info = get_ip_info(api_key, ip)
+            output = (
+                f"{domain} : {ip} | "
+                f"City: {ip_info.get('city', 'N/A')} | "
+                f"Region: {ip_info.get('region', 'N/A')} | "
+                f"Country: {ip_info.get('country', 'N/A')} | "
+                f"Location: {ip_info.get('loc', 'N/A')} | "
+                f"Hosting: {ip_info.get('org', 'N/A')}"
+            )
+            print(output)
+        print("-----------")
 
 if __name__ == "__main__":
     main()
