@@ -2,27 +2,29 @@ import requests
 import socket
 import sys
 import os
+import csv
 
 def print_usage():
     print("Usage:")
-    print("  python ipinfo_lookup.py <IPINFO_API_KEY> <domains.txt>")
-    print("\nExample:")
-    print("  python ipinfo_lookup.py YOUR_API_KEY domains.txt")
+    print("  python ipinfo_lookup.py <IPINFO_API_KEY> <domain(s)|file> [--csv output.csv]")
+    print("\nExamples:")
+    print("  python ipinfo_lookup.py YOUR_API_KEY tesla.com")
+    print("  python ipinfo_lookup.py YOUR_API_KEY tesla.com,ford.com")
+    print("  python ipinfo_lookup.py YOUR_API_KEY domains.txt --csv output.csv")
     print("\nNOTE:")
     print("- To get a free API key, register at: https://ipinfo.io/signup")
     sys.exit(1)
 
-def read_domains(file_path):
-    if not os.path.isfile(file_path):
-        print(f"[!] File not found: {file_path}")
-        sys.exit(1)
-    with open(file_path, 'r') as f:
-        return [line.strip() for line in f if line.strip()]
+def parse_domains(source):
+    if os.path.isfile(source):
+        with open(source, 'r') as f:
+            return [line.strip() for line in f if line.strip()]
+    else:
+        return [d.strip() for d in source.split(',') if d.strip()]
 
 def resolve_domain(domain):
     try:
-        ip = socket.gethostbyname(domain)
-        return ip
+        return socket.gethostbyname(domain)
     except socket.gaierror as e:
         print(f"[!] Could not resolve {domain}: {e}")
         return None
@@ -41,31 +43,57 @@ def get_ip_info(api_key, ip):
         print(f"[!] Request failed for {ip}: {e}")
         return {}
 
+def write_to_csv(data, output_file):
+    keys = ['domain', 'ip', 'city', 'region', 'country', 'loc', 'org']
+    with open(output_file, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=keys)
+        writer.writeheader()
+        for entry in data:
+            writer.writerow(entry)
+    print(f"\n[+] Results written to: {output_file}")
+
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3:
         print_usage()
 
-    api_key = sys.argv[1]
-    domain_file = sys.argv[2]
-    domains = read_domains(domain_file)
+    ipinfo_key = sys.argv[1]
+    domain_input = sys.argv[2]
+    csv_output = None
 
-    print(f"\n[+] Processing {len(domains)} domain(s)...\n")
+    if '--csv' in sys.argv:
+        csv_index = sys.argv.index('--csv')
+        if csv_index + 1 < len(sys.argv):
+            csv_output = sys.argv[csv_index + 1]
+        else:
+            print("[!] CSV file name not provided after --csv")
+            sys.exit(1)
+
+    domains = parse_domains(domain_input)
+    results = []
+
+    print(f"\n[+] Processing the following domains: {domains}\n")
 
     for domain in domains:
-        print(f"[Domain] {domain}")
         ip = resolve_domain(domain)
         if ip:
-            ip_info = get_ip_info(api_key, ip)
-            output = (
-                f"{domain} : {ip} | "
-                f"City: {ip_info.get('city', 'N/A')} | "
-                f"Region: {ip_info.get('region', 'N/A')} | "
-                f"Country: {ip_info.get('country', 'N/A')} | "
-                f"Location: {ip_info.get('loc', 'N/A')} | "
-                f"Hosting: {ip_info.get('org', 'N/A')}"
-            )
-            print(output)
-        print("-----------")
+            info = get_ip_info(ipinfo_key, ip)
+            record = {
+                'domain': domain,
+                'ip': ip,
+                'city': info.get('city', 'N/A'),
+                'region': info.get('region', 'N/A'),
+                'country': info.get('country', 'N/A'),
+                'loc': info.get('loc', 'N/A'),
+                'org': info.get('org', 'N/A')
+            }
+            results.append(record)
+            if not csv_output:
+                print(f"{domain} : {ip} | City: {record['city']} | Region: {record['region']} | "
+                      f"Country: {record['country']} | Location: {record['loc']} | Hosting: {record['org']}")
+                print("-----------")
+
+    if csv_output:
+        write_to_csv(results, csv_output)
 
 if __name__ == "__main__":
     main()
