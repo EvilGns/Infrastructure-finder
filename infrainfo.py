@@ -3,24 +3,36 @@ import socket
 import sys
 import os
 import csv
+import re
 
 def print_usage():
-    print("Usage:")
-    print("  python ipinfo_lookup.py <IPINFO_API_KEY> <domain(s)|file> [--csv output.csv]")
-    print("\nExamples:")
-    print("  python ipinfo_lookup.py YOUR_API_KEY tesla.com")
-    print("  python ipinfo_lookup.py YOUR_API_KEY tesla.com,ford.com")
-    print("  python ipinfo_lookup.py YOUR_API_KEY domains.txt --csv output.csv")
-    print("\nNOTE:")
-    print("- To get a free API key, register at: https://ipinfo.io/signup")
+    print("""
+Usage:
+  python ipinfo_lookup.py <IPINFO_API_KEY> <domain(s)|file> [--csv output.csv]
+
+Examples:
+  python ipinfo_lookup.py YOUR_API_KEY tesla.com
+  python ipinfo_lookup.py YOUR_API_KEY tesla.com,ford.com
+  python ipinfo_lookup.py YOUR_API_KEY domains.txt --csv output.csv
+
+Note:
+  - The second argument can be a single domain, comma-separated domains, or a filename.
+  - To get a free API key, register at: https://ipinfo.io/signup
+""")
     sys.exit(1)
+
+def sanitize_domain(domain):
+    """Remove protocols and trailing slashes."""
+    domain = re.sub(r'^https?://', '', domain)
+    domain = domain.strip().rstrip('/')
+    return domain
 
 def parse_domains(source):
     if os.path.isfile(source):
         with open(source, 'r') as f:
-            return [line.strip() for line in f if line.strip()]
+            return [sanitize_domain(line.strip()) for line in f if line.strip()]
     else:
-        return [d.strip() for d in source.split(',') if d.strip()]
+        return [sanitize_domain(d) for d in source.split(',') if d.strip()]
 
 def resolve_domain(domain):
     try:
